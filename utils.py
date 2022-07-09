@@ -18,7 +18,7 @@ MODEL_CLASSES = {
 }
 
 MODEL_PATH_MAP = {
-    'bert': 'bert-base-uncased',
+    'bert': './bert-base-uncased',
     'distilbert': 'distilbert-base-uncased',
     'albert': 'albert-xxlarge-v1'
 }
@@ -42,12 +42,12 @@ def init_logger():
                         level=logging.INFO)
 
 
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if not args.no_cuda and torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.seed)
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
 
 
 def compute_metrics(intent_preds, intent_labels, slot_preds, slot_labels):
@@ -105,3 +105,25 @@ def get_sentence_frame_acc(intent_preds, intent_labels, slot_preds, slot_labels)
     return {
         "sementic_frame_acc": sementic_acc
     }
+
+
+
+
+def print_cmd(argv):
+    cmd = ""
+
+    print("\nExecuting:")
+    # prefix = "CUDA_VISIBLE_DEVICES=X python"
+    # cmd += prefix
+    #
+    # print(prefix, end=" ")
+    cmd += "python "
+    print("python", end=" ")
+    for i in range(len(argv)):
+        cmd += argv[i]
+        cmd += " "
+        print(argv[i], end=" ")
+    cmd += '\n'
+    print('\n')
+
+    return cmd

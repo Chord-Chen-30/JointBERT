@@ -1,27 +1,41 @@
 import argparse
+import sys
 
 from trainer import Trainer
-from utils import init_logger, load_tokenizer, read_prediction_text, set_seed, MODEL_CLASSES, MODEL_PATH_MAP
+from utils import init_logger, load_tokenizer, print_cmd, read_prediction_text, set_seed, MODEL_CLASSES, MODEL_PATH_MAP
 from data_loader import load_and_cache_examples
-
+from Logger import MyLogger
 
 def main(args):
     init_logger()
-    set_seed(args)
-    tokenizer = load_tokenizer(args)
+    mylogger = MyLogger(args.log_path, args, cmd=print_cmd(sys.argv))
+    for seed in args.seed.split(":"):
+        print("Seed:", seed)
+        set_seed(int(seed))
+        tokenizer = load_tokenizer(args)
 
-    train_dataset = load_and_cache_examples(args, tokenizer, mode="train")
-    dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev")
-    test_dataset = load_and_cache_examples(args, tokenizer, mode="test")
+        train_dataset, train_dataset_aug = load_and_cache_examples(args, tokenizer, mode='train')
+        
+        dev_dataset, _ = load_and_cache_examples(args, tokenizer, mode="dev")
+        test_dataset, _ = load_and_cache_examples(args, tokenizer, mode="test")
 
-    trainer = Trainer(args, train_dataset, dev_dataset, test_dataset)
+        trainer = Trainer(args, train_dataset, dev_dataset, test_dataset, train_dataset_aug, seed, mylogger)
 
-    if args.do_train:
-        trainer.train()
+        
+        if args.do_train:
+            if args.replace == 'none':
+                trainer.train()
+            else:
+                trainer.train_aug()
 
-    if args.do_eval:
-        trainer.load_model()
-        trainer.evaluate("test")
+        if args.do_eval:
+            # trainer.load_model()
+            trainer.load_model_online()
+            trainer.evaluate("test")
+
+
+    trainer.logger.cal_std_mean()
+    trainer.logger.save()
 
 
 if __name__ == '__main__':
@@ -35,12 +49,12 @@ if __name__ == '__main__':
 
     parser.add_argument("--model_type", default="bert", type=str, help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
 
-    parser.add_argument('--seed', type=int, default=1234, help="random seed for initialization")
+    parser.add_argument('--seed', type=str, default="0:30", help="random seed for initialization")
     parser.add_argument("--train_batch_size", default=32, type=int, help="Batch size for training.")
     parser.add_argument("--eval_batch_size", default=64, type=int, help="Batch size for evaluation.")
     parser.add_argument("--max_seq_len", default=50, type=int, help="The maximum total input sequence length after tokenization.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs", default=10.0, type=float, help="Total number of training epochs to perform.")
+    parser.add_argument("--num_train_epochs", default=70.0, type=float, help="Total number of training epochs to perform.")
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
@@ -66,7 +80,25 @@ if __name__ == '__main__':
     parser.add_argument("--use_crf", action="store_true", help="Whether to use CRF")
     parser.add_argument("--slot_pad_label", default="PAD", type=str, help="Pad token for slot label pad (to be ignore when calculate loss)")
 
+    # Mask
+    parser.add_argument("--sub_task", default='intent', type=str, help="intent/slot")
+    parser.add_argument("--replace", default='random', type=str, help="Replace strategy [none/random/frequency/bert]")
+    parser.add_argument("--replace_repeat", default=4, type=int, help="Times to apply replacement")
+
+    parser.add_argument("--weight", default=0.0001, type=float, help="weight of attribution loss")
+    parser.add_argument("--margin", default=0.1, type=float, help="Margin loss - margin")
+    parser.add_argument("--shot", default=10, type=int, help="few shot setting: SHOT for each class")
+
+    parser.add_argument("--log_path", default="./log-temp/", type=str, help="Log dir")
+    parser.add_argument("--verbose", default=0, type=int, help="Detailed print()")
+    parser.add_argument("--early_stop", default=15, type=int, help="Early stop")
+
     args = parser.parse_args()
 
     args.model_name_or_path = MODEL_PATH_MAP[args.model_type]
+
+    args.slot_loss_coef = 1.0 if args.sub_task == 'slot' else 0.0
+
     main(args)
+
+    print("Success")
